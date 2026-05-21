@@ -42,4 +42,11 @@ Thumbs.db
 # Vercel
 .vercel
 
+# Environment — use only `frontend/.env` (no .env.local, .env.development, etc.)
 .env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+.env.example
