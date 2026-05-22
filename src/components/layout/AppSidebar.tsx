@@ -17,9 +17,32 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/staff/managers', label: 'Managers', roles: ['ADMIN'] },
   { href: '/hotels', label: 'Hotels', roles: ['SUPER_ADMIN', 'ADMIN', 'GUEST'] },
   { href: '/rooms', label: 'Rooms', roles: ['HOTEL_MANAGER'] },
-  { href: '/bookings/new', label: 'Book', roles: ['SUPER_ADMIN', 'ADMIN', 'HOTEL_MANAGER', 'GUEST'] },
+  {
+    href: '/bookings/reservations',
+    label: 'Reservations',
+    roles: ['HOTEL_MANAGER'],
+  },
+  { href: '/bookings/new', label: 'Book', roles: ['GUEST'] },
+  {
+    href: '/bookings/my',
+    label: 'My reservations',
+    roles: ['GUEST'],
+  },
   { href: '/dashboard', label: 'Dashboard', roles: ['SUPER_ADMIN', 'ADMIN', 'HOTEL_MANAGER'] },
 ];
+
+function isNavActive(pathname: string, href: string): boolean {
+  if (href === '/bookings/my') {
+    return pathname === '/bookings/my' || pathname.startsWith('/bookings/my/');
+  }
+  if (href === '/bookings/reservations') {
+    return (
+      pathname === '/bookings/reservations' ||
+      pathname.startsWith('/bookings/reservations/')
+    );
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 const SIDEBAR_WIDTH = 'w-64';
 
@@ -88,7 +111,7 @@ function SidebarPanel({
             key={item.href}
             href={item.href}
             onClick={onNavigate}
-            className={`block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${linkClass(pathname.startsWith(item.href))}`}
+            className={`block rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${linkClass(isNavActive(pathname, item.href))}`}
           >
             {item.label}
           </Link>
