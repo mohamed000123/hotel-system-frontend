@@ -1,37 +1,141 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect, useRef, useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ApiClientError } from '@/lib/api/client';
 import { getRedirectPath } from '@/lib/auth-routes';
 import { useLogin, useRegister } from '@/lib/queries/use-auth';
+import {
+  loginSchema,
+  registerSchema,
+  type LoginFormValues,
+  type RegisterFormValues,
+} from '@/lib/validation/schemas';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
-import { FormField } from '@/components/ui/FormField';
-import { PasswordField } from '@/components/ui/PasswordField';
+import { HookFormField } from '@/components/ui/HookFormField';
+import { HookFormPasswordField } from '@/components/ui/HookFormPasswordField';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { validateNewPassword } from '@/lib/validation/password';
 
-export default function LoginPage() {
+function AuthFormPanel({ mode }: { mode: 'login' | 'register' }) {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading } = useAuth();
   const loginMutation = useLogin();
   const registerMutation = useRegister();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const isLogin = mode === 'login';
+  const submitRef = useRef<HTMLButtonElement>(null);
 
-  const activeMutation = mode === 'login' ? loginMutation : registerMutation;
-  const isPending = activeMutation.isPending;
+  const form = useForm<LoginFormValues | RegisterFormValues>({
+    resolver: zodResolver(isLogin ? loginSchema : registerSchema),
+    defaultValues: isLogin
+      ? { email: '', password: '' }
+      : { email: '', password: '', confirmPassword: '' },
+    mode: 'onBlur',
+  });
+
+  const activeMutation = isLogin ? loginMutation : registerMutation;
   const apiError =
     activeMutation.error instanceof ApiClientError
       ? activeMutation.error.message
       : activeMutation.error
         ? 'Request failed'
         : null;
-  const displayError = validationError ?? apiError;
+
+  useEffect(() => {
+    const btn = submitRef.current;
+    if (!btn) return;
+    if (activeMutation.isPending) {
+      btn.setAttribute('aria-busy', 'true');
+      btn.setAttribute('aria-label', 'Submitting, please wait');
+    } else {
+      btn.removeAttribute('aria-busy');
+      btn.setAttribute(
+        'aria-label',
+        isLogin ? 'Sign in' : 'Create account',
+      );
+    }
+  }, [activeMutation.isPending, isLogin]);
+
+  async function onSubmit(values: LoginFormValues | RegisterFormValues) {
+    try {
+      const response = isLogin
+        ? await loginMutation.mutateAsync({
+            email: values.email,
+            password: values.password,
+          })
+        : await registerMutation.mutateAsync({
+            email: values.email,
+            password: values.password,
+          });
+      router.replace(getRedirectPath(response.user));
+    } catch {
+      /* error surfaced via mutation state */
+    }
+  }
+
+  return (
+    <FormProvider {...form}>
+      <form
+        onSubmit={form.handleSubmit(onSubmit)}
+        className="space-y-5"
+        aria-labelledby="auth-form-title"
+        noValidate
+      >
+        <HookFormField
+          name="email"
+          label="Email address"
+          type="email"
+          autoComplete="email"
+          placeholder="you@example.com"
+        />
+
+        {isLogin ? (
+          <HookFormField
+            name="password"
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Your password"
+          />
+        ) : (
+          <HookFormPasswordField
+            name="password"
+            label="Password"
+            placeholder="Create a strong password"
+          />
+        )}
+
+        {!isLogin && (
+          <HookFormField
+            name="confirmPassword"
+            label="Confirm password"
+            type="password"
+            autoComplete="new-password"
+            placeholder="Re-enter your password"
+          />
+        )}
+
+        {apiError && <ErrorMessage message={apiError} />}
+
+        <button
+          ref={submitRef}
+          type="submit"
+          disabled={activeMutation.isPending}
+          aria-label="Sign in"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-600/25 transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {activeMutation.isPending ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
+        </button>
+      </form>
+    </FormProvider>
+  );
+}
+
+export default function LoginPage() {
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
@@ -47,44 +151,8 @@ export default function LoginPage() {
     );
   }
 
-  function switchMode(next: 'login' | 'register') {
-    setMode(next);
-    setValidationError(null);
-    if (next === 'login') {
-      setConfirmPassword('');
-    }
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setValidationError(null);
-
-    if (mode === 'register') {
-      const passwordError = validateNewPassword(password);
-      if (passwordError) {
-        setValidationError(passwordError);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setValidationError('Passwords do not match');
-        return;
-      }
-    }
-
-    try {
-      const response =
-        mode === 'login'
-          ? await loginMutation.mutateAsync({ email, password })
-          : await registerMutation.mutateAsync({ email, password });
-      router.replace(getRedirectPath(response.user));
-    } catch {
-      /* error surfaced via mutation state */
-    }
-  }
-
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
-      {/* Background */}
       <div
         className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900"
         aria-hidden
@@ -103,7 +171,6 @@ export default function LoginPage() {
       />
 
       <div className="relative w-full max-w-md">
-        {/* Brand */}
         <div className="mb-8 text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 shadow-lg ring-1 ring-white/20 backdrop-blur-sm">
             <svg
@@ -126,7 +193,6 @@ export default function LoginPage() {
           </h1>
         </div>
 
-        {/* Card */}
         <div className="rounded-2xl border border-white/10 bg-white p-8 shadow-2xl shadow-black/40">
           <div className="mb-6">
             <h2
@@ -137,7 +203,6 @@ export default function LoginPage() {
             </h2>
           </div>
 
-          {/* Mode toggle — buttons (not form inputs) to satisfy axe/forms */}
           <div
             className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1"
             role="group"
@@ -146,7 +211,7 @@ export default function LoginPage() {
             <button
               type="button"
               title="Sign in"
-              onClick={() => switchMode('login')}
+              onClick={() => setMode('login')}
               className={`rounded-lg py-2.5 text-sm font-medium transition ${
                 mode === 'login'
                   ? 'bg-white text-slate-900 shadow-sm'
@@ -158,7 +223,7 @@ export default function LoginPage() {
             <button
               type="button"
               title="Register"
-              onClick={() => switchMode('register')}
+              onClick={() => setMode('register')}
               className={`rounded-lg py-2.5 text-sm font-medium transition ${
                 mode === 'register'
                   ? 'bg-white text-slate-900 shadow-sm'
@@ -169,88 +234,7 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-5"
-            aria-labelledby="auth-form-title"
-          >
-            <FormField
-              id="email"
-              label="Email address"
-              type="email"
-              required
-              autoComplete="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-
-            {mode === 'login' ? (
-              <FormField
-                id="password"
-                label="Password"
-                type="password"
-                required
-                autoComplete="current-password"
-                placeholder="Your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            ) : (
-              <PasswordField
-                id="password"
-                label="Password"
-                required
-                placeholder="Create a strong password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (validationError) setValidationError(null);
-                }}
-              />
-            )}
-
-            {mode === 'register' && (
-              <FormField
-                id="confirmPassword"
-                label="Confirm password"
-                type="password"
-                required
-                autoComplete="new-password"
-                placeholder="Re-enter your password"
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (validationError) setValidationError(null);
-                }}
-              />
-            )}
-
-            {displayError && <ErrorMessage message={displayError} />}
-
-            {isPending ? (
-              <button
-                type="submit"
-                disabled
-                aria-label="Submitting, please wait"
-                aria-busy="true"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-600/25 transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span
-                  className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                  aria-hidden
-                />
-                Please wait…
-              </button>
-            ) : (
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-md shadow-indigo-600/25 transition hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {mode === 'login' ? 'Sign in' : 'Create account'}
-              </button>
-            )}
-          </form>
+          <AuthFormPanel key={mode} mode={mode} />
         </div>
       </div>
     </main>

@@ -1,27 +1,28 @@
+import { forwardRef, type InputHTMLAttributes } from 'react';
 import { FormField } from './FormField';
-import type { InputHTMLAttributes } from 'react';
 import { STRONG_PASSWORD_MESSAGE } from '@/lib/validation/password';
 
 interface PasswordFieldProps extends InputHTMLAttributes<HTMLInputElement> {
   id: string;
   label: string;
+  hint?: string;
+  error?: string;
 }
 
-export function PasswordField({
-  id,
-  label,
-  className,
-  ...inputProps
-}: PasswordFieldProps) {
-  return (
-    <FormField
-      id={id}
-      label={label}
-      type="password"
-      autoComplete="new-password"
-      hint={STRONG_PASSWORD_MESSAGE}
-      className={className}
-      {...inputProps}
-    />
-  );
-}
+export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
+  function PasswordField({ id, label, hint, error, className, ...inputProps }, ref) {
+    return (
+      <FormField
+        ref={ref}
+        id={id}
+        label={label}
+        type="password"
+        autoComplete="new-password"
+        hint={hint ?? STRONG_PASSWORD_MESSAGE}
+        error={error}
+        className={className}
+        {...inputProps}
+      />
+    );
+  },
+);

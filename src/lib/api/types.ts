@@ -1,5 +1,7 @@
 /** Shared API types aligned with specs/001-hotel-booking-system/contracts/openapi.yaml */
 
+import type { RoomTypeLabel } from '@/lib/constants/room-types';
+
 export type Role = 'SUPER_ADMIN' | 'ADMIN' | 'HOTEL_MANAGER' | 'GUEST';
 export type HotelStatus = 'ACTIVE' | 'INACTIVE';
 export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED';
@@ -108,7 +110,7 @@ export interface ListHotelsParams extends PaginationParams {
 export interface Room {
   id: string;
   hotelId: string;
-  roomType: string;
+  roomType: RoomTypeLabel;
   capacity: number;
   pricePerNight: number;
   isAvailable: boolean;
@@ -117,21 +119,22 @@ export interface Room {
 export interface RoomList extends PaginatedList<Room> {}
 
 export interface RoomCreateDto {
-  roomType: string;
+  roomType: RoomTypeLabel;
   capacity: number;
   pricePerNight: number;
   isAvailable: boolean;
 }
 
 export interface RoomUpdateDto {
-  roomType?: string;
+  roomType?: RoomTypeLabel;
   capacity?: number;
   pricePerNight?: number;
   isAvailable?: boolean;
 }
 
 export interface ListRoomsParams extends PaginationParams {
-  hotelId: string;
+  checkIn?: string;
+  checkOut?: string;
 }
 
 export interface Booking {

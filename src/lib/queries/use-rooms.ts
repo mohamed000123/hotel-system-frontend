@@ -1,20 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as roomsApi from '../api/rooms';
 import type {
-  PaginationParams,
+  ListRoomsParams,
   RoomCreateDto,
   RoomUpdateDto,
 } from '../api/types';
 import { queryKeys } from './query-keys';
 
-export function useRooms(hotelId: string, params?: PaginationParams) {
+export function useRooms(hotelId: string, params?: ListRoomsParams) {
+  const hasDateRange = Boolean(params?.checkIn && params?.checkOut);
   return useQuery({
     queryKey: [
       ...queryKeys.rooms.byHotel(hotelId),
       params ?? {},
     ] as const,
     queryFn: () => roomsApi.listRooms(hotelId, params),
-    enabled: Boolean(hotelId),
+    enabled:
+      Boolean(hotelId) &&
+      ((!params?.checkIn && !params?.checkOut) || hasDateRange),
   });
 }
 

@@ -1,15 +1,20 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { ApiClientError } from '@/lib/api/client';
 import { getRedirectPath } from '@/lib/auth-routes';
 import { useChangePassword } from '@/lib/queries/use-auth';
-import { validateNewPassword } from '@/lib/validation/password';
+import {
+  changePasswordSchema,
+  type ChangePasswordFormValues,
+} from '@/lib/validation/schemas';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
-import { FormField } from '@/components/ui/FormField';
-import { PasswordField } from '@/components/ui/PasswordField';
+import { HookFormField } from '@/components/ui/HookFormField';
+import { HookFormPasswordField } from '@/components/ui/HookFormPasswordField';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function ChangePasswordPage() {
@@ -17,10 +22,15 @@ export default function ChangePasswordPage() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const changeMutation = useChangePassword();
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
+  const form = useForm<ChangePasswordFormValues>({
+    resolver: zodResolver(changePasswordSchema),
+    defaultValues: {
+      currentPassword: '',
+      newPassword: '',
+      confirmPassword: '',
+    },
+    mode: 'onBlur',
+  });
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -38,26 +48,12 @@ export default function ChangePasswordPage() {
       : changeMutation.error
         ? 'Failed to update password'
         : null;
-  const displayError = validationError ?? apiError;
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setValidationError(null);
-
-    const passwordError = validateNewPassword(newPassword);
-    if (passwordError) {
-      setValidationError(passwordError);
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setValidationError('Passwords do not match');
-      return;
-    }
-
+  async function onSubmit(values: ChangePasswordFormValues) {
     try {
       const updated = await changeMutation.mutateAsync({
-        currentPassword,
-        newPassword,
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
       });
       router.replace(getRedirectPath(updated));
     } catch {
@@ -81,49 +77,43 @@ export default function ChangePasswordPage() {
         to continue — you only need to do this once.
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-        <FormField
-          id="current-password"
-          label="Temporary password"
-          type="password"
-          required
-          autoComplete="current-password"
-          value={currentPassword}
-          onChange={(e) => setCurrentPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-        />
-        <PasswordField
-          id="new-password"
-          label="New password"
-          required
-          value={newPassword}
-          onChange={(e) => {
-            setNewPassword(e.target.value);
-            if (validationError) setValidationError(null);
-          }}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-        />
-        <FormField
-          id="confirm-new-password"
-          label="Confirm new password"
-          type="password"
-          required
-          autoComplete="new-password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-        />
-
-        {displayError && <ErrorMessage message={displayError} />}
-
-        <button
-          type="submit"
-          disabled={changeMutation.isPending}
-          className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+      <FormProvider {...form}>
+        <form
+          onSubmit={form.handleSubmit(onSubmit)}
+          className="mt-6 space-y-4"
+          noValidate
         >
-          {changeMutation.isPending ? 'Saving…' : 'Save and continue'}
-        </button>
-      </form>
+          <HookFormField
+            name="currentPassword"
+            label="Temporary password"
+            type="password"
+            autoComplete="current-password"
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+          />
+          <HookFormPasswordField
+            name="newPassword"
+            label="New password"
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+          />
+          <HookFormField
+            name="confirmPassword"
+            label="Confirm new password"
+            type="password"
+            autoComplete="new-password"
+            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
+          />
+
+          {apiError && <ErrorMessage message={apiError} />}
+
+          <button
+            type="submit"
+            disabled={changeMutation.isPending}
+            className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {changeMutation.isPending ? 'Saving…' : 'Save and continue'}
+          </button>
+        </form>
+      </FormProvider>
 
       <button
         type="button"

@@ -1,15 +1,20 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMemo, useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListUsersParams } from '@/lib/api/types';
 import { useCreateUser, useDeleteUser, useUsersList } from '@/lib/queries/use-users';
+import {
+  createManagerSchema,
+  type CreateManagerFormValues,
+} from '@/lib/validation/schemas';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
-import { FormField } from '@/components/ui/FormField';
-import { PasswordField } from '@/components/ui/PasswordField';
+import { HookFormField } from '@/components/ui/HookFormField';
+import { HookFormPasswordField } from '@/components/ui/HookFormPasswordField';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { PaginationControls } from '@/components/ui/PaginationControls';
-import { validateNewPassword } from '@/lib/validation/password';
 
 const fieldClass =
   'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20';
@@ -25,10 +30,12 @@ export default function StaffManagersPage() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
   const createMutation = useCreateUser();
   const deleteMutation = useDeleteUser();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [hotelId, setHotelId] = useState('');
-  const [validationError, setValidationError] = useState<string | null>(null);
+
+  const form = useForm<CreateManagerFormValues>({
+    resolver: zodResolver(createManagerSchema),
+    defaultValues: { email: '', password: '', hotelId: '' },
+    mode: 'onBlur',
+  });
 
   const createError =
     createMutation.error instanceof ApiClientError
@@ -36,7 +43,6 @@ export default function StaffManagersPage() {
       : createMutation.error
         ? 'Failed to create manager'
         : null;
-  const displayError = validationError ?? createError;
 
   const deleteError =
     deleteMutation.error instanceof ApiClientError
@@ -60,24 +66,15 @@ export default function StaffManagersPage() {
     }
   }
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
-    setValidationError(null);
-    const passwordError = validateNewPassword(password);
-    if (passwordError) {
-      setValidationError(passwordError);
-      return;
-    }
+  async function onSubmit(values: CreateManagerFormValues) {
     try {
       await createMutation.mutateAsync({
-        email,
-        password,
+        email: values.email,
+        password: values.password,
         role: 'HOTEL_MANAGER',
-        hotelId,
+        hotelId: values.hotelId,
       });
-      setEmail('');
-      setPassword('');
-      setHotelId('');
+      form.reset();
     } catch {
       /* surfaced via mutation */
     }
@@ -87,7 +84,7 @@ export default function StaffManagersPage() {
     <div>
       <h1 className="text-2xl font-bold">Hotel managers</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Any Admin can create, update, and remove Hotel Manager accounts. Each hotel may
+        Super Admin and Admin can create, update, and remove Hotel Manager accounts. Each hotel may
         have only one manager — assign a hotel by ID (hotel picker coming once the catalog
         is implemented).
       </p>
@@ -97,50 +94,44 @@ export default function StaffManagersPage() {
         <p className="mt-1 text-sm text-gray-500">
           The manager must set a new password on first sign-in (temporary password below).
         </p>
-        <form onSubmit={handleCreate} className="mt-4 max-w-md space-y-4">
-          <FormField
-            id="manager-email"
-            label="Email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="manager@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className={fieldClass}
-          />
-          <PasswordField
-            id="manager-password"
-            label="Temporary password"
-            required
-            placeholder="Create a strong password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              if (validationError) setValidationError(null);
-            }}
-            className={fieldClass}
-          />
-          <FormField
-            id="manager-hotel-id"
-            label="Hotel ID (UUID)"
-            type="text"
-            required
-            placeholder="Hotel UUID from database"
-            value={hotelId}
-            onChange={(e) => setHotelId(e.target.value)}
-            className={fieldClass}
-          />
-          {displayError && <ErrorMessage message={displayError} />}
-          <button
-            type="submit"
-            disabled={createMutation.isPending}
-            title="Create manager"
-            className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+        <FormProvider {...form}>
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="mt-4 max-w-md space-y-4"
+            noValidate
           >
-            {createMutation.isPending ? 'Creating…' : 'Create manager'}
-          </button>
-        </form>
+            <HookFormField
+              name="email"
+              label="Email"
+              type="email"
+              autoComplete="email"
+              placeholder="manager@example.com"
+              className={fieldClass}
+            />
+            <HookFormPasswordField
+              name="password"
+              label="Temporary password"
+              placeholder="Create a strong password"
+              className={fieldClass}
+            />
+            <HookFormField
+              name="hotelId"
+              label="Hotel ID (UUID)"
+              type="text"
+              placeholder="Hotel UUID from database"
+              className={fieldClass}
+            />
+            {createError && <ErrorMessage message={createError} />}
+            <button
+              type="submit"
+              disabled={createMutation.isPending}
+              title="Create manager"
+              className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {createMutation.isPending ? 'Creating…' : 'Create manager'}
+            </button>
+          </form>
+        </FormProvider>
       </section>
 
       <section className="mt-8">

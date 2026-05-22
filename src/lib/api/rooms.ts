@@ -1,14 +1,14 @@
 import { apiRequest } from './client';
 import { buildListQuery } from './query-params';
 import type {
-  PaginationParams,
+  ListRoomsParams,
   Room,
   RoomCreateDto,
   RoomList,
   RoomUpdateDto,
 } from './types';
 
-export function listRooms(hotelId: string, params?: PaginationParams) {
+export function listRooms(hotelId: string, params?: ListRoomsParams) {
   return apiRequest<RoomList>(
     `/hotels/${hotelId}/rooms${buildListQuery(params)}`,
   );

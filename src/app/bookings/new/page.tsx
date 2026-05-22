@@ -1,14 +1,22 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
-import { FormEvent, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { FormProvider, useForm, useWatch, type Resolver } from 'react-hook-form';
 import { ApiClientError } from '@/lib/api/client';
-import type { BookingCreateDto } from '@/lib/api/types';
 import { useHotels } from '@/lib/queries/use-hotels';
 import { useCreateBooking, useQuoteBooking } from '@/lib/queries/use-bookings';
 import { useRooms } from '@/lib/queries/use-rooms';
+import { ROOM_CAPACITY_MAX } from '@/lib/validation/limits';
+import {
+  createBookingSchema,
+  type BookingFormValues,
+} from '@/lib/validation/schemas';
 import { formatBookingMoney } from '@/components/bookings/booking-display';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { HookFormField } from '@/components/ui/HookFormField';
+import { HookFormSelect } from '@/components/ui/HookFormSelect';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 function mutationError(error: unknown, fallback: string) {
@@ -16,15 +24,32 @@ function mutationError(error: unknown, fallback: string) {
 }
 
 export default function NewBookingPage() {
-  const [hotelId, setHotelId] = useState('');
-  const [roomId, setRoomId] = useState('');
-  const [checkIn, setCheckIn] = useState('');
-  const [checkOut, setCheckOut] = useState('');
-  const [guestCount, setGuestCount] = useState(1);
   const [quote, setQuote] = useState<{ nights: number; totalAmount: number } | null>(
     null,
   );
   const [formError, setFormError] = useState<string | null>(null);
+
+  const form = useForm<BookingFormValues>({
+    resolver: zodResolver(
+      createBookingSchema(ROOM_CAPACITY_MAX),
+    ) as Resolver<BookingFormValues>,
+    defaultValues: {
+      hotelId: '',
+      roomId: '',
+      checkIn: '',
+      checkOut: '',
+      guestCount: 1,
+    },
+    mode: 'onBlur',
+  });
+
+  const { resetField, control } = form;
+  const hotelId = useWatch({ control, name: 'hotelId' });
+  const roomId = useWatch({ control, name: 'roomId' });
+  const checkIn = useWatch({ control, name: 'checkIn' });
+  const checkOut = useWatch({ control, name: 'checkOut' });
+
+  const datesValid = Boolean(checkIn && checkOut && checkOut > checkIn);
 
   const { data: hotelsData, isPending: hotelsLoading } = useHotels({
     status: 'ACTIVE',
@@ -33,72 +58,89 @@ export default function NewBookingPage() {
 
   const { data: roomsData, isPending: roomsLoading } = useRooms(hotelId, {
     limit: 100,
+    checkIn: datesValid ? checkIn : undefined,
+    checkOut: datesValid ? checkOut : undefined,
   });
 
   const quoteMutation = useQuoteBooking();
   const createMutation = useCreateBooking();
 
   const hotels = hotelsData?.data ?? [];
-  const rooms = roomsData?.data ?? [];
+  const rooms = useMemo(
+    () => (roomsData?.data ?? []).filter((r) => r.isAvailable),
+    [roomsData?.data],
+  );
 
   const selectedRoom = useMemo(
     () => rooms.find((r) => r.id === roomId),
     [rooms, roomId],
   );
 
-  const bookingPayload = useMemo((): BookingCreateDto | null => {
-    if (!hotelId || !roomId || !checkIn || !checkOut) return null;
-    return { hotelId, roomId, checkIn, checkOut, guestCount };
-  }, [hotelId, roomId, checkIn, checkOut, guestCount]);
+  const hotelOptions = hotels.map((h) => ({
+    value: h.id,
+    label: `${h.name} — ${h.city}`,
+  }));
 
-  const canSubmit = Boolean(bookingPayload && quote);
+  const roomOptions = rooms.map((r) => ({
+    value: r.id,
+    label: `${r.roomType} — ${formatBookingMoney(r.pricePerNight)}/night — cap ${r.capacity}`,
+  }));
 
   function resetQuote() {
     setQuote(null);
   }
 
-  function handleHotelChange(nextHotelId: string) {
-    setHotelId(nextHotelId);
-    setRoomId('');
+  useEffect(() => {
+    resetField('roomId');
     resetQuote();
+  }, [hotelId, checkIn, checkOut, resetField]);
+
+  function buildPayload(values: BookingFormValues) {
+    if (selectedRoom && values.guestCount > selectedRoom.capacity) {
+      form.setError('guestCount', {
+        message: `Guest count cannot exceed room capacity (${selectedRoom.capacity})`,
+      });
+      return null;
+    }
+    return {
+      hotelId: values.hotelId,
+      roomId: values.roomId,
+      checkIn: values.checkIn,
+      checkOut: values.checkOut,
+      guestCount: values.guestCount,
+    };
   }
 
-  async function handleGetQuote(e: FormEvent) {
-    e.preventDefault();
+  async function onGetQuote(values: BookingFormValues) {
     setFormError(null);
     resetQuote();
-
-    if (!bookingPayload) {
-      setFormError('Select a hotel, room, and valid dates');
-      return;
-    }
-
-    if (selectedRoom && guestCount > selectedRoom.capacity) {
-      setFormError(
-        `Guest count cannot exceed room capacity (${selectedRoom.capacity})`,
-      );
-      return;
-    }
+    const payload = buildPayload(values);
+    if (!payload) return;
 
     try {
-      const result = await quoteMutation.mutateAsync(bookingPayload);
+      const result = await quoteMutation.mutateAsync(payload);
       setQuote(result);
     } catch (err) {
       setFormError(mutationError(err, 'Failed to get quote'));
     }
   }
 
-  async function handleCreateBooking() {
-    if (!bookingPayload) return;
+  async function onCreateBooking(values: BookingFormValues) {
+    if (!quote) return;
     setFormError(null);
+    const payload = buildPayload(values);
+    if (!payload) return;
 
     try {
-      await createMutation.mutateAsync(bookingPayload);
+      await createMutation.mutateAsync(payload);
       setQuote(null);
-      setCheckIn('');
-      setCheckOut('');
-      setGuestCount(1);
-      setRoomId('');
+      form.reset({
+        hotelId: '',
+        roomId: '',
+        checkIn: '',
+        checkOut: '',
+        guestCount: 1,
+      });
     } catch (err) {
       setFormError(mutationError(err, 'Failed to create booking'));
     }
@@ -135,157 +177,95 @@ export default function NewBookingPage() {
 
         {hotelsLoading && <LoadingSpinner className="mt-4" label="Loading hotels…" />}
 
-        <form onSubmit={handleGetQuote} className="mt-4 space-y-4">
-          <div>
-            <label htmlFor="hotel" className="block text-sm font-medium text-gray-700">
-              Hotel
-            </label>
-            <select
-              id="hotel"
-              value={hotelId}
-              onChange={(e) => handleHotelChange(e.target.value)}
-              required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-            >
-              <option value="">Select a hotel</option>
-              {hotels.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} — {h.city}
-                </option>
-              ))}
-            </select>
-          </div>
+        <FormProvider {...form}>
+          <form className="mt-4 space-y-4" noValidate>
+            <HookFormSelect
+              name="hotelId"
+              label="Hotel"
+              placeholder="Select a hotel"
+              options={hotelOptions}
+              disabled={hotelsLoading}
+            />
 
-          {hotelId && (
-            <div>
-              <label htmlFor="room" className="block text-sm font-medium text-gray-700">
-                Room
-              </label>
-              {roomsLoading ? (
-                <LoadingSpinner className="mt-2" label="Loading rooms…" />
-              ) : (
-                <select
-                  id="room"
-                  value={roomId}
-                  onChange={(e) => {
-                    setRoomId(e.target.value);
-                    resetQuote();
-                  }}
-                  required
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-                >
-                  <option value="">Select a room</option>
-                  {rooms.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.roomType} — {formatBookingMoney(r.pricePerNight)}/night — cap{' '}
-                      {r.capacity}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {!roomsLoading && rooms.length === 0 && (
-                <p className="mt-1 text-sm text-amber-700">
-                  No available rooms for this hotel.
-                </p>
-              )}
-            </div>
-          )}
+            {hotelId && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <HookFormField name="checkIn" label="Check-in" type="date" />
+                <HookFormField name="checkOut" label="Check-out" type="date" />
+              </div>
+            )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="check-in"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Check-in
-              </label>
-              <input
-                id="check-in"
-                type="date"
-                value={checkIn}
-                onChange={(e) => {
-                  setCheckIn(e.target.value);
-                  resetQuote();
-                }}
-                required
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="check-out"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Check-out
-              </label>
-              <input
-                id="check-out"
-                type="date"
-                value={checkOut}
-                onChange={(e) => {
-                  setCheckOut(e.target.value);
-                  resetQuote();
-                }}
-                required
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2"
-              />
-            </div>
-          </div>
+            {hotelId && checkIn && checkOut && !datesValid && (
+              <p className="text-sm text-amber-700">
+                Check-out must be after check-in before choosing a room.
+              </p>
+            )}
 
-          <div>
-            <label
-              htmlFor="guests"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Guests
-            </label>
-            <input
-              id="guests"
+            {hotelId && datesValid && (
+              <>
+                {roomsLoading ? (
+                  <LoadingSpinner className="mt-2" label="Loading rooms…" />
+                ) : (
+                  <HookFormSelect
+                    name="roomId"
+                    label="Room"
+                    placeholder="Select a room"
+                    options={roomOptions}
+                    onValueChange={() => resetQuote()}
+                  />
+                )}
+                {!roomsLoading && rooms.length === 0 && (
+                  <p className="text-sm text-amber-700">
+                    No rooms available for these dates. Try different check-in or
+                    check-out dates.
+                  </p>
+                )}
+              </>
+            )}
+
+            <HookFormField
+              name="guestCount"
+              label="Guests"
               type="number"
               min={1}
-              max={selectedRoom?.capacity ?? 99}
-              value={guestCount}
-              onChange={(e) => {
-                setGuestCount(Number(e.target.value));
-                resetQuote();
-              }}
-              required
+              max={selectedRoom?.capacity ?? ROOM_CAPACITY_MAX}
               className="mt-1 w-32 rounded-md border border-gray-300 px-3 py-2"
+              onChange={() => resetQuote()}
             />
-          </div>
 
-          {quote && (
-            <div className="rounded-md bg-blue-50 px-4 py-3 text-sm text-blue-900">
-              <p>
-                <span className="font-medium">{quote.nights}</span> night
-                {quote.nights !== 1 ? 's' : ''} · Total{' '}
-                <span className="font-medium">
-                  {formatBookingMoney(quote.totalAmount)}
-                </span>
-              </p>
+            {quote && (
+              <div className="rounded-md bg-blue-50 px-4 py-3 text-sm text-blue-900">
+                <p>
+                  <span className="font-medium">{quote.nights}</span> night
+                  {quote.nights !== 1 ? 's' : ''} · Total{' '}
+                  <span className="font-medium">
+                    {formatBookingMoney(quote.totalAmount)}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {displayError && <ErrorMessage message={displayError} />}
+
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={quoteMutation.isPending}
+                onClick={form.handleSubmit(onGetQuote)}
+                className="rounded-md bg-gray-800 px-4 py-2 text-sm text-white hover:bg-gray-900 disabled:opacity-50"
+              >
+                {quoteMutation.isPending ? 'Getting quote…' : 'Get quote'}
+              </button>
+              <button
+                type="button"
+                onClick={form.handleSubmit(onCreateBooking)}
+                disabled={!quote || createMutation.isPending}
+                className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {createMutation.isPending ? 'Booking…' : 'Book (pending)'}
+              </button>
             </div>
-          )}
-
-          {displayError && <ErrorMessage message={displayError} />}
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="submit"
-              disabled={quoteMutation.isPending || !bookingPayload}
-              className="rounded-md bg-gray-800 px-4 py-2 text-sm text-white hover:bg-gray-900 disabled:opacity-50"
-            >
-              {quoteMutation.isPending ? 'Getting quote…' : 'Get quote'}
-            </button>
-            <button
-              type="button"
-              onClick={handleCreateBooking}
-              disabled={!canSubmit || createMutation.isPending}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {createMutation.isPending ? 'Booking…' : 'Book (pending)'}
-            </button>
-          </div>
-        </form>
+          </form>
+        </FormProvider>
       </section>
     </div>
   );
