@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { HotelForm } from '@/components/hotels/HotelForm';
+import { HotelStatusControl } from '@/components/hotels/HotelStatusControl';
 import { useAuth } from '@/context/AuthContext';
 import { ApiClientError } from '@/lib/api/client';
 import { useHotel } from '@/lib/queries/use-hotels';
@@ -58,15 +59,7 @@ export default function HotelDetailPage() {
                     {hotel.city} · {hotel.address}
                   </p>
                 </div>
-                <span
-                  className={
-                    hotel.status === 'ACTIVE'
-                      ? 'rounded bg-green-100 px-2 py-1 text-sm text-green-800'
-                      : 'rounded bg-gray-200 px-2 py-1 text-sm text-gray-700'
-                  }
-                >
-                  {hotel.status === 'ACTIVE' ? 'Active' : 'Inactive'}
-                </span>
+                <HotelStatusControl hotel={hotel} canToggle={canManage} />
               </div>
 
               <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">

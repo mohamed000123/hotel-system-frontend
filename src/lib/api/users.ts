@@ -27,4 +27,8 @@ export function updateUser(id: string, data: UpdateUserDto) {
   });
 }
 
+export function deleteUser(id: string) {
+  return apiRequest<void>(`/users/${id}`, { method: 'DELETE' });
+}
+
 export type { Role };

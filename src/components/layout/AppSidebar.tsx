@@ -16,7 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/admin/users', label: 'Admins', roles: ['SUPER_ADMIN'] },
   { href: '/staff/managers', label: 'Managers', roles: ['ADMIN'] },
   { href: '/hotels', label: 'Hotels', roles: ['SUPER_ADMIN', 'ADMIN', 'GUEST'] },
-  { href: '/rooms', label: 'Rooms', roles: ['SUPER_ADMIN', 'ADMIN', 'HOTEL_MANAGER'] },
+  { href: '/rooms', label: 'Rooms', roles: ['HOTEL_MANAGER'] },
   { href: '/bookings/new', label: 'Book', roles: ['SUPER_ADMIN', 'ADMIN', 'HOTEL_MANAGER', 'GUEST'] },
   { href: '/dashboard', label: 'Dashboard', roles: ['SUPER_ADMIN', 'ADMIN', 'HOTEL_MANAGER'] },
 ];

@@ -3,10 +3,14 @@ import * as hotelsApi from '../api/hotels';
 import type { HotelCreateDto, HotelUpdateDto, ListHotelsParams } from '../api/types';
 import { queryKeys } from './query-keys';
 
-export function useHotels(params?: ListHotelsParams) {
+export function useHotels(
+  params?: ListHotelsParams,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: queryKeys.hotels.list((params ?? {}) as Record<string, unknown>),
     queryFn: () => hotelsApi.listHotels(params),
+    enabled: options?.enabled ?? true,
   });
 }
 

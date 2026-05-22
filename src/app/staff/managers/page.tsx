@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListUsersParams } from '@/lib/api/types';
-import { useCreateUser, useUsersList } from '@/lib/queries/use-users';
+import { useCreateUser, useDeleteUser, useUsersList } from '@/lib/queries/use-users';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { FormField } from '@/components/ui/FormField';
 import { PasswordField } from '@/components/ui/PasswordField';
@@ -24,6 +24,7 @@ export default function StaffManagersPage() {
   const managers = data?.data ?? [];
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
   const createMutation = useCreateUser();
+  const deleteMutation = useDeleteUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [hotelId, setHotelId] = useState('');
@@ -36,6 +37,28 @@ export default function StaffManagersPage() {
         ? 'Failed to create manager'
         : null;
   const displayError = validationError ?? createError;
+
+  const deleteError =
+    deleteMutation.error instanceof ApiClientError
+      ? deleteMutation.error.message
+      : deleteMutation.error
+        ? 'Failed to delete manager'
+        : null;
+
+  async function handleDelete(id: string, email: string) {
+    if (
+      !confirm(
+        `Remove manager "${email}"? They will no longer be able to sign in.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch {
+      /* surfaced below */
+    }
+  }
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
@@ -64,8 +87,8 @@ export default function StaffManagersPage() {
     <div>
       <h1 className="text-2xl font-bold">Hotel managers</h1>
       <p className="mt-1 text-sm text-gray-600">
-        Any Admin can create and manage Hotel Manager accounts. Each hotel may have
-        only one manager — assign a hotel by ID (hotel picker coming once the catalog
+        Any Admin can create, update, and remove Hotel Manager accounts. Each hotel may
+        have only one manager — assign a hotel by ID (hotel picker coming once the catalog
         is implemented).
       </p>
 
@@ -141,16 +164,27 @@ export default function StaffManagersPage() {
             {managers.map((manager) => (
               <li
                 key={manager.id}
-                className="flex flex-col gap-1 px-4 py-3 text-sm sm:flex-row sm:justify-between"
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm"
               >
-                <span>{manager.email}</span>
-                <span className="text-gray-500">
-                  Hotel: {manager.hotelId ?? '—'}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{manager.email}</p>
+                  <p className="text-gray-500">
+                    Hotel: {manager.hotelId ?? '—'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(manager.id, manager.email)}
+                  disabled={deleteMutation.isPending}
+                  className="text-sm text-red-600 hover:underline disabled:opacity-50"
+                >
+                  Remove
+                </button>
               </li>
             ))}
           </ul>
         )}
+        {deleteError && <ErrorMessage className="mt-4" message={deleteError} />}
         {data && (
           <PaginationControls
             page={page}

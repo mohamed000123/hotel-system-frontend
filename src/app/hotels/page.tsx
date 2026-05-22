@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { HotelForm } from '@/components/hotels/HotelForm';
+import { HotelStatusControl } from '@/components/hotels/HotelStatusControl';
 import { useAuth } from '@/context/AuthContext';
 import { ApiClientError } from '@/lib/api/client';
 import type { HotelStatus, ListHotelsParams } from '@/lib/api/types';
@@ -15,18 +16,6 @@ const ORG_ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'] as const;
 
 function isOrgAdmin(role: string | undefined): boolean {
   return ORG_ADMIN_ROLES.includes(role as (typeof ORG_ADMIN_ROLES)[number]);
-}
-
-function statusBadge(status: HotelStatus) {
-  return status === 'ACTIVE' ? (
-    <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-800">
-      Active
-    </span>
-  ) : (
-    <span className="rounded bg-gray-200 px-2 py-0.5 text-xs text-gray-700">
-      Inactive
-    </span>
-  );
 }
 
 export default function HotelsPage() {
@@ -76,7 +65,7 @@ export default function HotelsPage() {
       <h1 className="text-2xl font-bold">Hotels</h1>
       <p className="mt-1 text-sm text-gray-600">
         {canManage
-          ? 'Create, search, and manage the hotel catalog.'
+          ? 'Create, search, and manage the hotel catalog. Activate or deactivate hotels to control guest visibility.'
           : 'Browse active hotels available for booking.'}
       </p>
 
@@ -180,8 +169,11 @@ export default function HotelsPage() {
                     {hotel.availableRoomCount ?? 0} rooms available
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  {statusBadge(hotel.status)}
+                <div className="flex flex-wrap items-center gap-3">
+                  <HotelStatusControl
+                    hotel={hotel}
+                    canToggle={canManage}
+                  />
                   {canManage && (
                     <button
                       type="button"

@@ -116,6 +116,20 @@ export interface Room {
 
 export interface RoomList extends PaginatedList<Room> {}
 
+export interface RoomCreateDto {
+  roomType: string;
+  capacity: number;
+  pricePerNight: number;
+  isAvailable: boolean;
+}
+
+export interface RoomUpdateDto {
+  roomType?: string;
+  capacity?: number;
+  pricePerNight?: number;
+  isAvailable?: boolean;
+}
+
 export interface ListRoomsParams extends PaginationParams {
   hotelId: string;
 }
