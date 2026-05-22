@@ -1,5 +1,3 @@
-'use client';
-
 import { AppSidebar } from './AppSidebar';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
