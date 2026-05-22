@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { useRouter } from 'next/navigation';
 import { getStoredToken } from '@/lib/api/client';
 import type { User } from '@/lib/api/types';
 import { useLogout, useMe } from '@/lib/queries/use-auth';
@@ -22,30 +23,38 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
-
   useEffect(() => {
     setMounted(true);
   }, []);
 
   const hasToken = mounted && !!getStoredToken();
-  const { data: user, isLoading, isError } = useMe(hasToken);
+  const { data: me, isLoading, isError } = useMe(hasToken);
   const logoutFn = useLogout();
 
   const logout = useCallback(() => {
     logoutFn();
-  }, [logoutFn]);
+    router.replace('/login');
+  }, [logoutFn, router]);
 
   useEffect(() => {
-    if (isError && hasToken) {
-      logout();
+    if (!mounted) return;
+    if (hasToken && !isLoading && !me && !isError) {
+      logoutFn();
+      return;
     }
-  }, [isError, hasToken, logout]);
+    if (isError && hasToken) {
+      logoutFn();
+    }
+  }, [mounted, isError, hasToken, isLoading, me, logoutFn]);
+
+  const user = hasToken ? (me ?? null) : null;
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      user: user ?? null,
-      isAuthenticated: !!user && hasToken,
+      user,
+      isAuthenticated: hasToken && !!user,
       isLoading: hasToken && isLoading,
       logout,
     }),

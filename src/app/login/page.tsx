@@ -1,15 +1,20 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import { ApiClientError } from '@/lib/api/client';
 import { getRedirectPath } from '@/lib/auth-routes';
 import { useLogin, useRegister } from '@/lib/queries/use-auth';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { FormField } from '@/components/ui/FormField';
+import { PasswordField } from '@/components/ui/PasswordField';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { validateNewPassword } from '@/lib/validation/password';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, isAuthenticated, isLoading } = useAuth();
   const loginMutation = useLogin();
   const registerMutation = useRegister();
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -28,6 +33,20 @@ export default function LoginPage() {
         : null;
   const displayError = validationError ?? apiError;
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user) {
+      router.replace(getRedirectPath(user));
+    }
+  }, [isLoading, isAuthenticated, user, router]);
+
+  if (isLoading || (isAuthenticated && user)) {
+    return (
+      <main className="flex min-h-screen items-center justify-center">
+        <LoadingSpinner label="Loading your session…" />
+      </main>
+    );
+  }
+
   function switchMode(next: 'login' | 'register') {
     setMode(next);
     setValidationError(null);
@@ -40,9 +59,16 @@ export default function LoginPage() {
     e.preventDefault();
     setValidationError(null);
 
-    if (mode === 'register' && password !== confirmPassword) {
-      setValidationError('Passwords do not match');
-      return;
+    if (mode === 'register') {
+      const passwordError = validateNewPassword(password);
+      if (passwordError) {
+        setValidationError(passwordError);
+        return;
+      }
+      if (password !== confirmPassword) {
+        setValidationError('Passwords do not match');
+        return;
+      }
     }
 
     try {
@@ -50,7 +76,7 @@ export default function LoginPage() {
         mode === 'login'
           ? await loginMutation.mutateAsync({ email, password })
           : await registerMutation.mutateAsync({ email, password });
-      router.replace(getRedirectPath(response.user.role));
+      router.replace(getRedirectPath(response.user));
     } catch {
       /* error surfaced via mutation state */
     }
@@ -159,19 +185,30 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
             />
 
-            <FormField
-              id="password"
-              label="Password"
-              type="password"
-              required
-              minLength={8}
-              autoComplete={
-                mode === 'login' ? 'current-password' : 'new-password'
-              }
-              placeholder="At least 8 characters"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            {mode === 'login' ? (
+              <FormField
+                id="password"
+                label="Password"
+                type="password"
+                required
+                autoComplete="current-password"
+                placeholder="Your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            ) : (
+              <PasswordField
+                id="password"
+                label="Password"
+                required
+                placeholder="Create a strong password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (validationError) setValidationError(null);
+                }}
+              />
+            )}
 
             {mode === 'register' && (
               <FormField
@@ -179,7 +216,6 @@ export default function LoginPage() {
                 label="Confirm password"
                 type="password"
                 required
-                minLength={8}
                 autoComplete="new-password"
                 placeholder="Re-enter your password"
                 value={confirmPassword}

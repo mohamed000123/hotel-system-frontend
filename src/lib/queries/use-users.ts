@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as usersApi from '../api/users';
-import type { CreateUserDto, UpdateUserDto } from '../api/types';
+import type { CreateUserDto, ListUsersParams, UpdateUserDto } from '../api/types';
 import { queryKeys } from './query-keys';
 
-export function useUsersList(role?: 'ADMIN' | 'HOTEL_MANAGER') {
+export function useUsersList(params?: ListUsersParams) {
   return useQuery({
-    queryKey: queryKeys.users.list(role),
-    queryFn: () => usersApi.listUsers(role),
+    queryKey: queryKeys.users.list((params ?? {}) as Record<string, unknown>),
+    queryFn: () => usersApi.listUsers(params),
   });
 }
 

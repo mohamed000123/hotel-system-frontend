@@ -1,7 +1,13 @@
-import type { Role } from './api/types';
+import type { Role, User } from './api/types';
 
-export function getRedirectPath(role: Role): string {
-  switch (role) {
+export const CHANGE_PASSWORD_PATH = '/account/change-password';
+
+export function getRedirectPath(user: Pick<User, 'role' | 'mustChangePassword'>): string {
+  if (user.mustChangePassword) {
+    return CHANGE_PASSWORD_PATH;
+  }
+
+  switch (user.role) {
     case 'SUPER_ADMIN':
       return '/admin/users';
     case 'ADMIN':
@@ -13,4 +19,8 @@ export function getRedirectPath(role: Role): string {
     default:
       return '/login';
   }
+}
+
+export function roleHomePath(role: Role): string {
+  return getRedirectPath({ role, mustChangePassword: false });
 }

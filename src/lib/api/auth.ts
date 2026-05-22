@@ -1,5 +1,11 @@
 import { apiRequest } from './client';
-import type { AuthResponse, LoginDto, RegisterDto, User } from './types';
+import type {
+  AuthResponse,
+  ChangePasswordDto,
+  LoginDto,
+  RegisterDto,
+  User,
+} from './types';
 
 export function register(data: RegisterDto) {
   return apiRequest<AuthResponse>('/auth/register', {
@@ -19,4 +25,11 @@ export function login(data: LoginDto) {
 
 export function getMe() {
   return apiRequest<User>('/auth/me');
+}
+
+export function changePassword(data: ChangePasswordDto) {
+  return apiRequest<User>('/auth/change-password', {
+    method: 'POST',
+    body: data,
+  });
 }

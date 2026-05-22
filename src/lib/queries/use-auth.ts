@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../api/auth';
 import { setStoredToken } from '../api/client';
-import type { LoginDto, RegisterDto } from '../api/types';
+import type { ChangePasswordDto, LoginDto, RegisterDto } from '../api/types';
 import { queryKeys } from './query-keys';
 
 export function useMe(enabled = true) {
@@ -37,11 +37,21 @@ export function useRegister() {
   });
 }
 
+export function useChangePassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ChangePasswordDto) => authApi.changePassword(data),
+    onSuccess: (user) => {
+      queryClient.setQueryData(queryKeys.auth.me(), user);
+    },
+  });
+}
+
 export function useLogout() {
   const queryClient = useQueryClient();
   return () => {
     setStoredToken(null);
+    queryClient.setQueryData(queryKeys.auth.me(), null);
     queryClient.removeQueries({ queryKey: queryKeys.auth.all });
-    queryClient.clear();
   };
 }

@@ -5,7 +5,9 @@ export const queryKeys = {
   },
   users: {
     all: ['users'] as const,
-    list: (role?: string) => [...queryKeys.users.all, 'list', role ?? 'all'] as const,
+    lists: () => [...queryKeys.users.all, 'list'] as const,
+    list: (params: Record<string, unknown>) =>
+      [...queryKeys.users.lists(), params] as const,
   },
   hotels: {
     all: ['hotels'] as const,

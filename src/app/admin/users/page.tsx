@@ -1,20 +1,32 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
 import { ApiClientError } from '@/lib/api/client';
+import type { ListUsersParams } from '@/lib/api/types';
 import { useCreateUser, useUsersList } from '@/lib/queries/use-users';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
 import { FormField } from '@/components/ui/FormField';
+import { PasswordField } from '@/components/ui/PasswordField';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { PaginationControls } from '@/components/ui/PaginationControls';
+import { validateNewPassword } from '@/lib/validation/password';
 
 const fieldClass =
   'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20';
 
 export default function AdminUsersPage() {
-  const { data: admins, isPending, isError, error } = useUsersList('ADMIN');
+  const [page, setPage] = useState(1);
+  const listParams = useMemo(
+    (): ListUsersParams => ({ page, limit: 10, role: 'ADMIN' }),
+    [page],
+  );
+  const { data, isPending, isError, error } = useUsersList(listParams);
+  const admins = data?.data ?? [];
+  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
   const createMutation = useCreateUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const createError =
     createMutation.error instanceof ApiClientError
@@ -22,9 +34,16 @@ export default function AdminUsersPage() {
       : createMutation.error
         ? 'Failed to create admin'
         : null;
+  const displayError = validationError ?? createError;
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
+    setValidationError(null);
+    const passwordError = validateNewPassword(password);
+    if (passwordError) {
+      setValidationError(passwordError);
+      return;
+    }
     try {
       await createMutation.mutateAsync({
         email,
@@ -48,6 +67,9 @@ export default function AdminUsersPage() {
 
       <section className="mt-8 rounded-lg border border-gray-200 bg-white p-6">
         <h2 className="text-lg font-semibold">Create admin</h2>
+        <p className="mt-1 text-sm text-gray-500">
+          The admin must set a new password on first sign-in (temporary password below).
+        </p>
         <form onSubmit={handleCreate} className="mt-4 max-w-md space-y-4">
           <FormField
             id="admin-email"
@@ -60,19 +82,19 @@ export default function AdminUsersPage() {
             onChange={(e) => setEmail(e.target.value)}
             className={fieldClass}
           />
-          <FormField
+          <PasswordField
             id="admin-password"
             label="Temporary password"
-            type="password"
             required
-            minLength={8}
-            autoComplete="new-password"
-            placeholder="At least 8 characters"
+            placeholder="Create a strong password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              if (validationError) setValidationError(null);
+            }}
             className={fieldClass}
           />
-          {createError && <ErrorMessage message={createError} />}
+          {displayError && <ErrorMessage message={displayError} />}
           <button
             type="submit"
             disabled={createMutation.isPending}
@@ -97,10 +119,10 @@ export default function AdminUsersPage() {
             }
           />
         )}
-        {admins && admins.length === 0 && (
+        {!isPending && !isError && admins.length === 0 && (
           <p className="mt-4 text-sm text-gray-500">No admin accounts yet.</p>
         )}
-        {admins && admins.length > 0 && (
+        {admins.length > 0 && (
           <ul className="mt-4 divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
             {admins.map((admin) => (
               <li
@@ -116,6 +138,16 @@ export default function AdminUsersPage() {
               </li>
             ))}
           </ul>
+        )}
+        {data && (
+          <PaginationControls
+            page={page}
+            totalPages={totalPages}
+            total={data.total}
+            limit={data.limit}
+            itemLabel="admins"
+            onPageChange={setPage}
+          />
         )}
       </section>
     </div>

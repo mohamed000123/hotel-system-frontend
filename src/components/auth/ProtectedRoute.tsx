@@ -1,8 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { CHANGE_PASSWORD_PATH } from '@/lib/auth-routes';
 import type { Role } from '@/lib/api/types';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ErrorMessage } from '@/components/ui/ErrorMessage';
@@ -15,6 +16,7 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const roleDenied =
     isAuthenticated &&
@@ -26,8 +28,16 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace('/login');
+      return;
     }
-  }, [isAuthenticated, isLoading, router]);
+    if (
+      !isLoading &&
+      user?.mustChangePassword &&
+      pathname !== CHANGE_PASSWORD_PATH
+    ) {
+      router.replace(CHANGE_PASSWORD_PATH);
+    }
+  }, [isAuthenticated, isLoading, user, pathname, router]);
 
   if (isLoading) {
     return <LoadingSpinner label="Checking session…" />;
@@ -35,6 +45,10 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  if (user?.mustChangePassword && pathname !== CHANGE_PASSWORD_PATH) {
+    return <LoadingSpinner label="Redirecting…" />;
   }
 
   if (roleDenied) {
