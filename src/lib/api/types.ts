@@ -144,6 +144,8 @@ export interface Booking {
   nights: number;
   totalAmount: number;
   status: BookingStatus;
+  /** Guest list: cancel allowed only ≥24h before check-in (hotel timezone). */
+  cancellable?: boolean;
 }
 
 export interface BookingList extends PaginatedList<Booking> {}
@@ -153,9 +155,25 @@ export interface ListBookingsParams extends PaginationParams {
   hotelId?: string;
 }
 
+export interface BookingCreateDto {
+  hotelId: string;
+  roomId: string;
+  checkIn: string;
+  checkOut: string;
+  guestCount: number;
+}
+
 export interface BookingQuote {
   nights: number;
   totalAmount: number;
+}
+
+export interface Payment {
+  id: string;
+  bookingId: string;
+  amount: number;
+  status: 'COMPLETED';
+  completedAt: string;
 }
 
 export interface DashboardStats {
