@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { HotelForm } from '@/components/hotels/HotelForm';
 import { HotelStatusControl } from '@/components/hotels/HotelStatusControl';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import type { HotelStatus, ListHotelsParams } from '@/lib/api/types';
 import { useDeleteHotel, useHotels } from '@/lib/queries/use-hotels';
@@ -19,6 +20,7 @@ function isOrgAdmin(role: string | undefined): boolean {
 }
 
 export default function HotelsPage() {
+  const { confirm, showToast } = useToast();
   const { user } = useAuth();
   const canManage = isOrgAdmin(user?.role);
   const deleteMutation = useDeleteHotel();
@@ -45,20 +47,29 @@ export default function HotelsPage() {
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const approved = await confirm({
+      title: `Delete "${name}"?`,
+      description: 'This cannot be undone.',
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+    });
+    if (!approved) return;
     try {
       await deleteMutation.mutateAsync(id);
-    } catch {
-      /* surfaced below */
+      showToast({
+        title: 'Hotel deleted',
+        description: `"${name}" has been removed.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to delete hotel',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
     }
   }
-
-  const deleteError =
-    deleteMutation.error instanceof ApiClientError
-      ? deleteMutation.error.message
-      : deleteMutation.error
-        ? 'Failed to delete hotel'
-        : null;
 
   return (
     <div>
@@ -189,7 +200,6 @@ export default function HotelsPage() {
             ))}
           </ul>
         )}
-        {deleteError && <ErrorMessage className="mt-4" message={deleteError} />}
         {data && (
           <PaginationControls
             page={page}

@@ -25,7 +25,7 @@ export default function ReservationsPage() {
   }, [page, statusFilter]);
 
   const { data, isPending, isError, error } = useBookings(listParams);
-  const { data: roomsData } = useRooms(hotelId, { page: 1, limit: 200 });
+  const { data: roomsData } = useRooms(hotelId, { page: 1, limit: 10 });
 
   const roomLabels = useMemo(() => {
     const map = new Map<string, string>();

@@ -68,7 +68,6 @@ export interface UpdateUserDto {
 }
 
 export interface AuthResponse {
-  accessToken: string;
   user: User;
 }
 

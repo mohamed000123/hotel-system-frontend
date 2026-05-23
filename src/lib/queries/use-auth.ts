@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as authApi from '../api/auth';
-import { setStoredToken } from '../api/client';
 import type { ChangePasswordDto, LoginDto, RegisterDto } from '../api/types';
 import { queryKeys } from './query-keys';
 
@@ -20,7 +19,6 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: LoginDto) => authApi.login(data),
     onSuccess: (response) => {
-      setStoredToken(response.accessToken);
       queryClient.setQueryData(queryKeys.auth.me(), response.user);
     },
   });
@@ -31,7 +29,6 @@ export function useRegister() {
   return useMutation({
     mutationFn: (data: RegisterDto) => authApi.register(data),
     onSuccess: (response) => {
-      setStoredToken(response.accessToken);
       queryClient.setQueryData(queryKeys.auth.me(), response.user);
     },
   });
@@ -49,8 +46,12 @@ export function useChangePassword() {
 
 export function useLogout() {
   const queryClient = useQueryClient();
-  return () => {
-    setStoredToken(null);
+  return async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Clear local auth state even if network request fails.
+    }
     queryClient.setQueryData(queryKeys.auth.me(), null);
     queryClient.removeQueries({ queryKey: queryKeys.auth.all });
   };

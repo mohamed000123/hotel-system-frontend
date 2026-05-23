@@ -1,24 +1,10 @@
 import type { ApiError } from './types';
 
-const TOKEN_KEY = 'hotel_booking_token';
-
 export function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
 }
 
-export function getStoredToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setStoredToken(token: string | null): void {
-  if (typeof window === 'undefined') return;
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token);
-  } else {
-    localStorage.removeItem(TOKEN_KEY);
-  }
-}
+let refreshRequest: Promise<boolean> | null = null;
 
 export class ApiClientError extends Error {
   constructor(
@@ -33,34 +19,42 @@ export class ApiClientError extends Error {
 
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
-  auth?: boolean;
+  skipAuthRefresh?: boolean;
 }
 
 export async function apiRequest<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const { body, auth = true, headers: initHeaders, ...rest } = options;
-  const headers = new Headers(initHeaders);
-
-  if (body !== undefined && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (auth) {
-    const token = getStoredToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    }
-  }
-
+  const { body, headers: initHeaders, skipAuthRefresh = false, ...rest } = options;
   const url = `${getApiBaseUrl()}${path.startsWith('/') ? path : `/${path}`}`;
 
-  const response = await fetch(url, {
-    ...rest,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  const executeRequest = () => {
+    const headers = new Headers(initHeaders);
+    if (body !== undefined && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
+    return fetch(url, {
+      ...rest,
+      credentials: 'include',
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  let response = await executeRequest();
+
+  if (
+    response.status === 401 &&
+    !skipAuthRefresh &&
+    shouldAttemptRefresh(path)
+  ) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await executeRequest();
+    }
+  }
 
   if (!response.ok) {
     let apiError: ApiError | undefined;
@@ -78,5 +72,43 @@ export async function apiRequest<T>(
     return undefined as T;
   }
 
+  const contentLength = response.headers.get('content-length');
+  if (contentLength === '0') {
+    return undefined as T;
+  }
+
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    const textBody = await response.text();
+    if (!textBody.trim()) {
+      return undefined as T;
+    }
+    throw new ApiClientError(
+      'Unexpected non-JSON response from server.',
+      response.status,
+    );
+  }
+
   return (await response.json()) as T;
+}
+
+function shouldAttemptRefresh(path: string): boolean {
+  return !['/auth/login', '/auth/register', '/auth/refresh', '/auth/logout'].includes(path);
+}
+
+async function refreshAccessToken(): Promise<boolean> {
+  if (!refreshRequest) {
+    const refreshUrl = `${getApiBaseUrl()}/auth/refresh`;
+    refreshRequest = fetch(refreshUrl, {
+      method: 'POST',
+      credentials: 'include',
+    })
+      .then((response) => response.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshRequest = null;
+      });
+  }
+
+  return refreshRequest;
 }

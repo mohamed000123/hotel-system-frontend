@@ -6,6 +6,7 @@ import { FormProvider, useForm } from 'react-hook-form';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListUsersParams } from '@/lib/api/types';
 import { useCreateUser, useDeleteUser, useUsersList } from '@/lib/queries/use-users';
+import { useToast } from '@/context/ToastContext';
 import {
   createManagerSchema,
   type CreateManagerFormValues,
@@ -20,6 +21,7 @@ const fieldClass =
   'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20';
 
 export default function StaffManagersPage() {
+  const { confirm, showToast } = useToast();
   const [page, setPage] = useState(1);
   const listParams = useMemo(
     (): ListUsersParams => ({ page, limit: 10, role: 'HOTEL_MANAGER' }),
@@ -37,32 +39,30 @@ export default function StaffManagersPage() {
     mode: 'onBlur',
   });
 
-  const createError =
-    createMutation.error instanceof ApiClientError
-      ? createMutation.error.message
-      : createMutation.error
-        ? 'Failed to create manager'
-        : null;
-
-  const deleteError =
-    deleteMutation.error instanceof ApiClientError
-      ? deleteMutation.error.message
-      : deleteMutation.error
-        ? 'Failed to delete manager'
-        : null;
-
   async function handleDelete(id: string, email: string) {
-    if (
-      !confirm(
-        `Remove manager "${email}"? They will no longer be able to sign in.`,
-      )
-    ) {
+    const approved = await confirm({
+      title: `Remove manager "${email}"?`,
+      description: 'They will no longer be able to sign in.',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep',
+    });
+    if (!approved) {
       return;
     }
     try {
       await deleteMutation.mutateAsync(id);
-    } catch {
-      /* surfaced below */
+      showToast({
+        title: 'Manager removed',
+        description: `"${email}" can no longer sign in.`,
+        variant: 'warning',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to remove manager',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
     }
   }
 
@@ -75,8 +75,18 @@ export default function StaffManagersPage() {
         hotelId: values.hotelId,
       });
       form.reset();
-    } catch {
-      /* surfaced via mutation */
+      showToast({
+        title: 'Manager created',
+        description: `${values.email} must change password on first sign-in.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to create manager',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
     }
   }
 
@@ -121,7 +131,6 @@ export default function StaffManagersPage() {
               placeholder="Hotel UUID from database"
               className={fieldClass}
             />
-            {createError && <ErrorMessage message={createError} />}
             <button
               type="submit"
               disabled={createMutation.isPending}
@@ -175,7 +184,6 @@ export default function StaffManagersPage() {
             ))}
           </ul>
         )}
-        {deleteError && <ErrorMessage className="mt-4" message={deleteError} />}
         {data && (
           <PaginationControls
             page={page}

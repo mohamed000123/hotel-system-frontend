@@ -3,9 +3,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import type { ListUsersParams } from '@/lib/api/types';
-import { useCreateUser, useUsersList } from '@/lib/queries/use-users';
+import { useCreateUser, useDeleteUser, useUsersList } from '@/lib/queries/use-users';
 import {
   createAdminSchema,
   type CreateAdminFormValues,
@@ -20,7 +21,9 @@ const fieldClass =
   'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20';
 
 export default function AdminUsersPage() {
+  const { confirm, showToast } = useToast();
   const [page, setPage] = useState(1);
+  const [deletingAdminId, setDeletingAdminId] = useState<string | null>(null);
   const listParams = useMemo(
     (): ListUsersParams => ({ page, limit: 10, role: 'ADMIN' }),
     [page],
@@ -29,19 +32,13 @@ export default function AdminUsersPage() {
   const admins = data?.data ?? [];
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
   const createMutation = useCreateUser();
+  const deleteMutation = useDeleteUser();
 
   const form = useForm<CreateAdminFormValues>({
     resolver: zodResolver(createAdminSchema),
     defaultValues: { email: '', password: '' },
     mode: 'onBlur',
   });
-
-  const createError =
-    createMutation.error instanceof ApiClientError
-      ? createMutation.error.message
-      : createMutation.error
-        ? 'Failed to create admin'
-        : null;
 
   async function onSubmit(values: CreateAdminFormValues) {
     try {
@@ -51,8 +48,53 @@ export default function AdminUsersPage() {
         role: 'ADMIN',
       });
       form.reset();
-    } catch {
-      /* surfaced via mutation */
+      showToast({
+        title: 'Admin created',
+        description: `${values.email} must change password on first sign-in.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to create admin',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
+    }
+  }
+
+  async function handleDelete(id: string, email: string) {
+    if (deletingAdminId) {
+      return;
+    }
+
+    const approved = await confirm({
+      title: `Remove admin "${email}"?`,
+      description: 'They will no longer be able to sign in.',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep',
+    });
+    if (!approved) {
+      return;
+    }
+
+    try {
+      setDeletingAdminId(id);
+      await deleteMutation.mutateAsync(id);
+      showToast({
+        title: 'Admin deleted',
+        description: `"${email}" has been removed.`,
+        variant: 'warning',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to delete admin',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
+    } finally {
+      setDeletingAdminId(null);
     }
   }
 
@@ -88,7 +130,6 @@ export default function AdminUsersPage() {
               placeholder="Create a strong password"
               className={fieldClass}
             />
-            {createError && <ErrorMessage message={createError} />}
             <button
               type="submit"
               disabled={createMutation.isPending}
@@ -130,6 +171,14 @@ export default function AdminUsersPage() {
                     ? new Date(admin.createdAt).toLocaleDateString()
                     : '—'}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(admin.id, admin.email)}
+                  title={deletingAdminId === admin.id ? 'Deleting admin' : 'Delete admin'}
+                  className="text-sm text-red-600 hover:underline"
+                >
+                  {deletingAdminId === admin.id ? 'Deleting…' : 'Delete'}
+                </button>
               </li>
             ))}
           </ul>

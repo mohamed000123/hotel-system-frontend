@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { GuestBookingRow } from '@/components/bookings/GuestBookingRow';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import type { BookingStatus, ListBookingsParams } from '@/lib/api/types';
 import {
@@ -19,6 +20,7 @@ function mutationError(error: unknown, fallback: string) {
 }
 
 export default function MyBookingsPage() {
+  const { confirm, showToast } = useToast();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<'' | BookingStatus>('');
 
@@ -38,27 +40,42 @@ export default function MyBookingsPage() {
   async function handlePay(id: string) {
     try {
       await payMutation.mutateAsync(id);
-    } catch {
-      /* surfaced below */
+      showToast({
+        title: 'Payment completed',
+        description: 'Reservation has been confirmed.',
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Payment failed',
+        description: mutationError(error, 'Please try again.'),
+        variant: 'error',
+      });
     }
   }
 
   async function handleCancel(id: string) {
-    if (!confirm('Cancel this booking?')) return;
+    const approved = await confirm({
+      title: 'Cancel this booking?',
+      description: 'This action cannot be undone.',
+      confirmLabel: 'Cancel booking',
+      cancelLabel: 'Keep booking',
+    });
+    if (!approved) return;
     try {
       await cancelMutation.mutateAsync(id);
-    } catch {
-      /* surfaced below */
+      showToast({
+        title: 'Reservation cancelled',
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Cancellation failed',
+        description: mutationError(error, 'Please try again.'),
+        variant: 'error',
+      });
     }
   }
-
-  const actionError =
-    payMutation.error || cancelMutation.error
-      ? mutationError(
-          payMutation.error ?? cancelMutation.error,
-          'Action failed',
-        )
-      : null;
 
   return (
     <div>
@@ -144,7 +161,6 @@ export default function MyBookingsPage() {
             onPageChange={setPage}
           />
         )}
-        {actionError && <ErrorMessage className="mt-4" message={actionError} />}
       </section>
     </div>
   );

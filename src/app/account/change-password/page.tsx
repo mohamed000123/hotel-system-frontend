@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import { getRedirectPath } from '@/lib/auth-routes';
 import { useChangePassword } from '@/lib/queries/use-auth';
@@ -19,6 +20,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const { user, isAuthenticated, isLoading, logout } = useAuth();
   const changeMutation = useChangePassword();
 
@@ -55,9 +57,19 @@ export default function ChangePasswordPage() {
         currentPassword: values.currentPassword,
         newPassword: values.newPassword,
       });
+      showToast({
+        title: 'Password updated',
+        description: 'Your new password has been saved.',
+        variant: 'success',
+      });
       router.replace(getRedirectPath(updated));
-    } catch {
-      /* surfaced via mutation */
+    } catch (error) {
+      showToast({
+        title: 'Failed to update password',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
     }
   }
 

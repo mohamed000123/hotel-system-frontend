@@ -3,7 +3,7 @@
 import { ApiClientError } from '@/lib/api/client';
 import type { Hotel, HotelStatus } from '@/lib/api/types';
 import { useUpdateHotel } from '@/lib/queries/use-hotels';
-import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { useToast } from '@/context/ToastContext';
 
 export function statusBadge(status: HotelStatus) {
   return status === 'ACTIVE' ? (
@@ -21,15 +21,14 @@ interface HotelStatusControlProps {
   hotel: Pick<Hotel, 'id' | 'status' | 'name'>;
   /** When false, only the status badge is shown. */
   canToggle?: boolean;
-  errorClassName?: string;
 }
 
 export function HotelStatusControl({
   hotel,
   canToggle = false,
-  errorClassName,
 }: HotelStatusControlProps) {
   const updateMutation = useUpdateHotel();
+  const { confirm, showToast } = useToast();
 
   const nextStatus: HotelStatus =
     hotel.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
@@ -40,15 +39,16 @@ export function HotelStatusControl({
   async function handleToggle() {
     const action =
       hotel.status === 'ACTIVE' ? 'deactivate' : 'activate';
-    if (
-      !confirm(
-        `${action === 'deactivate' ? 'Deactivate' : 'Activate'} "${hotel.name}"? ${
-          action === 'deactivate'
-            ? 'Guests will no longer see it for booking.'
-            : 'It will appear in the catalog again.'
-        }`,
-      )
-    ) {
+    const approved = await confirm({
+      title: `${action === 'deactivate' ? 'Deactivate' : 'Activate'} "${hotel.name}"?`,
+      description:
+        action === 'deactivate'
+          ? 'Guests will no longer see it for booking.'
+          : 'It will appear in the catalog again.',
+      confirmLabel: action === 'deactivate' ? 'Deactivate' : 'Activate',
+      cancelLabel: 'Cancel',
+    });
+    if (!approved) {
       return;
     }
     try {
@@ -56,17 +56,20 @@ export function HotelStatusControl({
         id: hotel.id,
         data: { status: nextStatus },
       });
-    } catch {
-      /* surfaced below */
+      showToast({
+        title: `Hotel ${nextStatus === 'ACTIVE' ? 'activated' : 'deactivated'}`,
+        description: `"${hotel.name}" is now ${nextStatus.toLowerCase()}.`,
+        variant: 'success',
+      });
+    } catch (error) {
+      showToast({
+        title: 'Failed to update hotel status',
+        description:
+          error instanceof ApiClientError ? error.message : 'Please try again.',
+        variant: 'error',
+      });
     }
   }
-
-  const toggleError =
-    updateMutation.error instanceof ApiClientError
-      ? updateMutation.error.message
-      : updateMutation.error
-        ? 'Failed to update hotel status'
-        : null;
 
   return (
     <div className={canToggle ? 'flex flex-col items-end gap-1' : undefined}>
@@ -83,9 +86,6 @@ export function HotelStatusControl({
           </button>
         )}
       </div>
-      {toggleError && (
-        <ErrorMessage className={errorClassName} message={toggleError} />
-      )}
     </div>
   );
 }

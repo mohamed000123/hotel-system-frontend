@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { RoomForm } from '@/components/rooms/RoomForm';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import type { Room } from '@/lib/api/types';
 import { useHotel } from '@/lib/queries/use-hotels';
@@ -25,6 +26,7 @@ function availabilityBadge(available: boolean) {
 
 export default function RoomsPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const hotelId = user?.hotelId ?? '';
   const { data: hotel } = useHotel(hotelId);
 
@@ -49,8 +51,17 @@ export default function RoomsPage() {
         hotelId: room.hotelId,
         data: { isAvailable: !room.isAvailable },
       });
+      showToast({
+        title: room.isAvailable ? 'Room marked unavailable' : 'Room marked available',
+        description: `${room.roomType} status was updated.`,
+        variant: 'success',
+      });
     } catch {
-      /* surfaced below */
+      showToast({
+        title: 'Failed to update room status',
+        description: 'Please try again.',
+        variant: 'error',
+      });
     }
   }
 

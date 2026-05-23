@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { FormProvider, useForm, useWatch, type Resolver } from 'react-hook-form';
+import { useToast } from '@/context/ToastContext';
 import { ApiClientError } from '@/lib/api/client';
 import { useHotels } from '@/lib/queries/use-hotels';
 import { useCreateBooking, useQuoteBooking } from '@/lib/queries/use-bookings';
@@ -24,6 +25,7 @@ function mutationError(error: unknown, fallback: string) {
 }
 
 export default function NewBookingPage() {
+  const { showToast } = useToast();
   const [quote, setQuote] = useState<{ nights: number; totalAmount: number } | null>(
     null,
   );
@@ -120,8 +122,18 @@ export default function NewBookingPage() {
     try {
       const result = await quoteMutation.mutateAsync(payload);
       setQuote(result);
+      showToast({
+        title: 'Quote ready',
+        description: `${result.nights} night(s), total ${formatBookingMoney(result.totalAmount)}.`,
+        variant: 'info',
+      });
     } catch (err) {
       setFormError(mutationError(err, 'Failed to get quote'));
+      showToast({
+        title: 'Failed to get quote',
+        description: mutationError(err, 'Please try again.'),
+        variant: 'error',
+      });
     }
   }
 
@@ -133,6 +145,11 @@ export default function NewBookingPage() {
 
     try {
       await createMutation.mutateAsync(payload);
+      showToast({
+        title: 'Booking created',
+        description: 'Your reservation is pending payment.',
+        variant: 'success',
+      });
       setQuote(null);
       form.reset({
         hotelId: '',
@@ -143,6 +160,11 @@ export default function NewBookingPage() {
       });
     } catch (err) {
       setFormError(mutationError(err, 'Failed to create booking'));
+      showToast({
+        title: 'Failed to create booking',
+        description: mutationError(err, 'Please try again.'),
+        variant: 'error',
+      });
     }
   }
 
